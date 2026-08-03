@@ -1,10 +1,26 @@
-# athena-gitops
+<p align="center">
+  <img src="docs/assets/athena-logo.svg" alt="Athena logo" width="130">
+</p>
 
-The ArgoCD-watched GitOps manifest repository for the Athena estate
-(interview-prep project — see the platform handbook, `athena-docs`, for the
-full estate-level story). CI on `athena-app` commits image tags **into**
-this repo; ArgoCD is the only thing that **applies out of** it. Nothing here
-is ever `kubectl apply`'d by hand or by a CI job directly.
+<h1 align="center">athena-gitops</h1>
+
+<p align="center">
+  GitOps manifests for the <a href="https://github.com/AuraBit">Athena estate</a>. ArgoCD applies what lands here. Nothing else does.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/ArgoCD-declarative%20CD-EF7B4D?logo=argo&logoColor=white" alt="ArgoCD">
+  <img src="https://img.shields.io/badge/promotion-folder--per--env-326CE5" alt="folder-per-environment">
+</p>
+
+---
+
+This is the deployment source of truth for Athena, an open replica of a
+production-grade DevOps estate that runs entirely on a laptop. CI on
+[`athena-app`](https://github.com/AuraBit/athena-app) commits image tags
+**into** this repo; ArgoCD is the only thing that **applies out of** it.
+Nothing here is ever `kubectl apply`'d by hand or by a CI job directly.
 
 ## Promotion model
 
@@ -24,14 +40,14 @@ environments is **folder-per-environment** — `envs/dev/`, `envs/stg/`,
   protected branch avoids all three failure modes by construction — there is
   exactly one source of truth (`main`), and "what's running in stg" is
   always answerable by looking at one folder's current contents, not by
-  diffing branches. The full reasoning, with the interview-ready "why not
-  branches" answer, is recorded as an ADR in `athena-docs`.
-- **Promotion gating (D-04):** the workflow job that writes to `envs/stg` or
-  `envs/prod` is bound to the corresponding GitHub Environment and pauses
-  for a required-reviewer approval before it commits; `envs/dev` promotes
-  automatically. ArgoCD's auto-sync stays **on** everywhere — the gate is on
-  the commit, not on ArgoCD's reconciliation, which preserves the drift-revert
-  demo Phase 3 builds on top of this repo.
+  diffing branches. The full reasoning is in
+  [this repo's ADR-0001](docs/adr/0001-folder-per-environment-and-the-promotion-gate.md).
+- **Promotion is gated at the commit, not at reconciliation.** The workflow
+  job that writes to `envs/stg` or `envs/prod` is bound to the corresponding
+  GitHub Environment and pauses for a required-reviewer approval before it
+  commits; `envs/dev` promotes automatically. ArgoCD's auto-sync stays **on**
+  everywhere — so drift still gets reverted the way GitOps promises, and the
+  human gate sits where it belongs, on the change entering `main`.
 
 ## Directory map
 
@@ -44,8 +60,18 @@ athena-gitops/
   docs/adr/ # decisions governing this repo specifically
 ```
 
-## Status
+## What's here today
 
-This repository is currently a skeleton — the `envs/*` folders and
-`docs/adr/` are the only structure Plan 04 seeds here. ArgoCD Application
-manifests and the actual promotion workflow land in Phase 3.
+The environment folders, the lint workflow that guards them, and the ADR
+recording the promotion model. ArgoCD Application manifests and the actual
+promotion workflow are the next things to land, once the app repo has images
+worth promoting.
+
+The rest of the estate: [`athena-infra`](https://github.com/AuraBit/athena-infra)
+(clusters, DNS/TLS, LocalStack, governance-as-code) and
+[`athena-docs`](https://github.com/AuraBit/athena-docs) (estate-wide ADRs,
+diagrams, study notes).
+
+## License
+
+[MIT](LICENSE)
