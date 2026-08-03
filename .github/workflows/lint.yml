@@ -1,6 +1,6 @@
 name: lint
 
-# athena-gitops deliberately has no merge_group trigger — D-02 restricts the
+# athena-gitops deliberately has no merge-queue trigger — D-02 restricts the
 # merge queue to athena-app only. This repo stays queue-free because the
 # bot's promotion-commit path (Phase 3+) must be fast, not gated behind a
 # queue of other PRs.
