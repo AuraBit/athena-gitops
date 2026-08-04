@@ -1,0 +1,30 @@
+# values-prod.yaml — prod's overrides only (Plan 03-09, Task 1; CD-03).
+# Same chart, same templates as dev/stg — differences are deliberate.
+media:
+  image:
+    tag: "ede5af6" # SEEDED from dev's pin at parity creation (stg was
+    # seeded identically) — the one manual tag write in prod's life; the
+    # gated promotion workflow owns every subsequent change, and prod only
+    # ever receives a tag stg is already running.
+  replicaCount: 2 # prod runs two media replicas — the one capacity difference
+  # this estate simulates: it exercises multi-replica rollout behaviour
+  # (Argo Rollouts lands here in a later phase) without meaningfully
+  # loading the shared local cluster.
+  hostname: media-prod.athena.net
+  env:
+    environment: prod
+  s3:
+    bucket: athena-media-prod # envs/prod/data-storage's Terraform output
+    accessKeyId: "333333333333"
+    secretAccessKey: "333333333333"
+
+shop:
+  image:
+    tag: "9034b09" # seeded from dev, same rule as media
+  hostname: shop-prod.athena.net
+  loadgenerator:
+    # Deliberately OFF in prod: production traffic is real traffic. A
+    # synthetic generator in prod is a chaos/load EXERCISE someone runs on
+    # purpose, never an always-on default — leaving it on would also make
+    # prod's Phase 4 dashboards lie about organic load.
+    enabled: false

@@ -1,0 +1,33 @@
+# values-stg.yaml — stg's overrides only (Plan 03-09, Task 1; CD-03).
+# Same chart, same templates as dev — every difference below is a
+# deliberate per-environment decision, not a copy with the name changed.
+media:
+  image:
+    tag: "ede5af6" # SEEDED from dev's pin at parity creation — the one
+    # manual tag write in stg's life; every later change arrives via the
+    # gated promotion workflow (promote.yml). NOTE: the overlay's image
+    # pin (overlays/stg/kustomization.yaml) is the authoritative value the
+    # promotion job edits; this chart value is the pre-transform default.
+  hostname: media-stg.athena.net
+  env:
+    environment: stg
+  s3:
+    # stg's own bucket from envs/stg/data-storage's Terraform output —
+    # cross-environment writes are structurally impossible (per-env
+    # simulated accounts, D-16/Phase 2).
+    bucket: athena-media-stg
+    accessKeyId: "222222222222"
+    secretAccessKey: "222222222222"
+
+shop:
+  image:
+    tag: "9034b09" # seeded from dev (build-all-images.sh run) — same rule
+    # as media: promotion owns every subsequent change.
+  hostname: shop-stg.athena.net
+  loadgenerator:
+    enabled: true
+    # Half of dev's synthetic load: stg exists to rehearse prod's gated
+    # promotion path and to give Phase 4's dashboards non-dev traffic; it
+    # needs signal, not soak volume.
+    users: 5
+    spawnRate: 1

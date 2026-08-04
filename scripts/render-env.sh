@@ -83,21 +83,37 @@ discover_units() {
 
 render_unit() {
   local unit="$1"
-  local overlay prefix outdir tmpl args
+  local overlay prefix outdir tmpl out err
   overlay="$(unit_overlay "$unit")"
   prefix="$(unit_prefix "$unit")"
   outdir="$(unit_outdir "$unit")"
 
-  args=()
+  # One helm invocation PER template, not one per unit: helm errors with
+  # "could not find template" when a --show-only target renders EMPTY
+  # (e.g. prod's `{{- if .Values.shop.loadgenerator.enabled }}` guard with
+  # the flag off). The file demonstrably exists — we globbed it — so that
+  # specific failure means "conditionally empty this env" and is skipped;
+  # any other helm failure still fails loudly.
+  : > "$overlay/rendered-input.yaml"
+  local found=0
   for tmpl in "$CHART"/templates/"$prefix"-*.yaml; do
     [ -e "$tmpl" ] || fail "no chart templates match ${prefix}-*.yaml for unit '$unit'"
-    args+=(--show-only "templates/$(basename "$tmpl")")
+    found=1
+    if out="$(helm template athena "$CHART" -f "$VALUES" -f "$ENV_VALUES" \
+        --show-only "templates/$(basename "$tmpl")" 2>&1)"; then
+      printf '%s\n' "$out" >> "$overlay/rendered-input.yaml"
+    else
+      if printf '%s' "$out" | grep -q "could not find template"; then
+        echo "render-env: note: $(basename "$tmpl") renders empty for '$ENV_NAME' (conditional off) — skipped"
+      else
+        printf '%s\n' "$out" >&2
+        fail "helm template failed for env '$ENV_NAME' unit '$unit' template '$(basename "$tmpl")'"
+      fi
+    fi
   done
+  [ "$found" -eq 1 ] || fail "no chart templates match ${prefix}-*.yaml for unit '$unit'"
 
   mkdir -p "$outdir"
-  helm template athena "$CHART" -f "$VALUES" -f "$ENV_VALUES" "${args[@]}" \
-    > "$overlay/rendered-input.yaml" \
-    || fail "helm template failed for env '$ENV_NAME' unit '$unit'"
   kustomize build "$overlay" > "$outdir/all.yaml" \
     || fail "kustomize build failed for env '$ENV_NAME' unit '$unit'"
   echo "render-env: rendered $ENV_NAME/$unit -> $outdir/all.yaml"

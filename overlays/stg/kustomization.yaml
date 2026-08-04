@@ -1,0 +1,18 @@
+# kustomization.yaml — stg's MEDIA-unit overlay (Plan 03-09, Task 1),
+# mirroring overlays/dev exactly: rendered-input.yaml is the transient
+# helm-template output (gitignored), the committed product is
+# ../../envs/stg/media/all.yaml, and the images: block below is the
+# environment's single authoritative image pin (D-22).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: stg
+resources:
+  - rendered-input.yaml
+
+# The media image pin — the ENTIRE surface of promotion into stg.
+# Seeded from dev's pin when this environment was created (the one manual
+# write); promote.yml owns every subsequent change, and rollback is
+# reverting the commit that changed this value.
+images:
+  - name: athena-registry:5000/athena-media
+    newTag: ede5af6 # media image pin — promotion surface (D-22)

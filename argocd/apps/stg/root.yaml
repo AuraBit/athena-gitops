@@ -1,0 +1,22 @@
+# root-stg — stg's app-of-apps root (Plan 03-09; D-31, D-33), the
+# exact shape of dev's: prod's protection lives in the promotion GATE
+# (promote.yml + the stg GitHub Environment), never in a half-applied
+# sync policy, so automated+selfHeal+prune apply to every environment.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-stg
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AuraBit/athena-gitops
+    path: argocd/apps/stg
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

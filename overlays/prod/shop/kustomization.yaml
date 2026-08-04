@@ -1,0 +1,8 @@
+# prod shop-unit overlay (Plan 03-09, Task 1) — mirrors
+# overlays/dev/shop: same chart templates, prod's namespace; rendered
+# product is ../../../envs/prod/athena-shop/all.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prod
+resources:
+  - rendered-input.yaml

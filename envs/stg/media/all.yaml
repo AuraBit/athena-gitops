@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: media
+  name: media
+  namespace: stg
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+  selector:
+    app: media
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: media
+  name: media
+  namespace: stg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: media
+  template:
+    metadata:
+      labels:
+        app: media
+    spec:
+      containers:
+      - env:
+        - name: MEDIA_HTTP_PORT
+          value: "8080"
+        - name: MEDIA_ENVIRONMENT
+          value: stg
+        - name: MEDIA_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              key: database-url
+              name: media-postgres-credentials
+        - name: MEDIA_VALKEY_ADDR
+          value: media-valkey:6379
+        - name: MEDIA_S3_BUCKET
+          value: athena-media-stg
+        - name: MEDIA_S3_ENDPOINT
+          value: http://host.k3d.internal:4566
+        - name: MEDIA_S3_REGION
+          value: us-east-1
+        - name: MEDIA_S3_KEY_PREFIX
+          value: uploads/
+        - name: MEDIA_S3_ACCESS_KEY_ID
+          value: "222222222222"
+        - name: MEDIA_S3_SECRET_ACCESS_KEY
+          value: "222222222222"
+        - name: MEDIA_MAX_UPLOAD_SIZE_BYTES
+          value: "8388608"
+        image: athena-registry:5000/athena-media:ede5af6
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        name: media
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: 250m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: media
+  namespace: stg
+spec:
+  hostnames:
+  - media-stg.athena.net
+  parentRefs:
+  - name: athena
+    namespace: gateway
+  rules:
+  - backendRefs:
+    - group: ""
+      kind: Service
+      name: media
+      port: 8080
+    matches:
+    - path:
+        type: PathPrefix
+        value: /

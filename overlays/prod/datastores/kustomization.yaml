@@ -1,0 +1,7 @@
+# prod datastores-unit overlay (Plan 03-09, Task 1) — mirrors
+# overlays/dev/datastores: same chart templates, prod's namespace.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prod
+resources:
+  - rendered-input.yaml

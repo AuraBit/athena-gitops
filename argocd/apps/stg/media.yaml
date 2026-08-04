@@ -1,0 +1,23 @@
+# media-stg (Plan 03-09) — mirrors dev's media child exactly:
+# source.path points at the RENDERED directory (D-28), destination is the
+# app cluster's k3s server-node address (SAN-valid; see
+# argocd/apps/dev/media.yaml's deviation note), and sync is automated with
+# self-heal + prune in every environment (D-33).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: media-stg
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AuraBit/athena-gitops
+    path: envs/stg/media
+    targetRevision: main
+  destination:
+    server: https://172.18.0.6:6443
+    namespace: stg
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

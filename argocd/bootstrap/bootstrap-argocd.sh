@@ -197,7 +197,11 @@ ok "app-cluster-secret applied (cluster registered as a remote destination)"
 #    a re-run (kubectl apply is idempotent regardless).
 # ---------------------------------------------------------------------------
 info "applying root-dev Application"
-kubectl --context "${PLATFORM_CTX}" -n "${ARGOCD_NAMESPACE}" apply -f "${REPO_ROOT}/argocd/apps/dev/root.yaml"
+# All three environments' roots (Plan 03-09): a rebuild-from-zero restores
+# every environment, not just dev. Children arrive via app-of-apps sync.
+for env_root in dev stg prod; do
+  kubectl --context "${PLATFORM_CTX}" -n "${ARGOCD_NAMESPACE}" apply -f "${REPO_ROOT}/argocd/apps/${env_root}/root.yaml"
+done
 ok "root-dev Application applied"
 
 info "bootstrap complete. Next steps for a human:"
