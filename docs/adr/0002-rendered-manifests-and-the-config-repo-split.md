@@ -14,15 +14,15 @@ changes, and where a rendering bug surfaces (in a PR, or in production).
 
 ## Considered Options
 
-1. **ArgoCD-side Helm rendering** — point Applications at charts/ and let the
+* **ArgoCD-side Helm rendering** — point Applications at charts/ and let the
    controller run Helm. Rejected: the diff a reviewer approves is a values
    change, not the manifests that will actually apply; a template bug
    surfaces at sync time in the cluster; and the ArgoCD-bundled Helm version
    becomes a hidden rendering dependency (the 3.4→3.5 Helm v4 bundling change
    would have been a silent renderer swap).
-2. **Kustomize --enable-helm inflator** — rejected: documented-experimental,
+* **Kustomize --enable-helm inflator** — rejected: documented-experimental,
    shells out to a Helm v3 binary specifically (CLAUDE.md's What-NOT-to-Use).
-3. **Rendered manifests, committed** (chosen) — `helm template --show-only`
+* **Rendered manifests, committed** (chosen) — `helm template --show-only`
    per unit, piped through the env's Kustomize overlay into
    `envs/<env>/<unit>/all.yaml`; ArgoCD syncs only those files.
 

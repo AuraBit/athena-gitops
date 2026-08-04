@@ -13,13 +13,13 @@ radius, status legibility, and how promotion maps onto git.
 
 ## Considered Options
 
-1. **One Application per environment** — rejected: a broken shop template
+* **One Application per environment** — rejected: a broken shop template
    would gate media's sync; one health status hides which unit regressed.
-2. **One Application per microservice** — rejected: 13+ Applications per env
+* **One Application per microservice** — rejected: 13+ Applications per env
    is ApplicationSet territory (Phase 7's per-service matrix may revisit);
    today it triples ceremony with no promotion benefit, since promotion
    operates on units.
-3. **One root per env + one child per deployable unit** (chosen): media,
+* **One root per env + one child per deployable unit** (chosen): media,
    datastores, athena-shop under root-{dev,stg,prod}.
 
 ## Decision
