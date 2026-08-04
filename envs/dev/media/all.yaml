@@ -37,6 +37,13 @@ spec:
           value: "8080"
         - name: MEDIA_ENVIRONMENT
           value: dev
+        - name: MEDIA_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              key: database-url
+              name: media-postgres-credentials
+        - name: MEDIA_VALKEY_ADDR
+          value: media-valkey:6379
         image: athena-registry:5000/athena-media:1492910
         imagePullPolicy: IfNotPresent
         livenessProbe:

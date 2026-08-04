@@ -9,6 +9,13 @@
 # Both probes hit /healthz — the only route this phase's media service
 # exposes (T-03-05 mitigation: explicit resource requests/limits below,
 # asserted by the rendered manifest per this plan's must_haves).
+#
+# MEDIA_DATABASE_URL (Plan 03-04) is sourced via secretKeyRef from the
+# datastores unit's Secret (datastores-postgres.yaml) — never rendered in
+# plain text in this Deployment. MEDIA_VALKEY_ADDR names the media-session
+# Valkey Service explicitly (datastores.valkey.mediaSession.serviceName) —
+# never the cart instance (D-18); grep -c 'cart' against the rendered
+# output must stay 0.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,6 +57,13 @@ spec:
               value: "{{ .Values.media.env.httpPort }}"
             - name: MEDIA_ENVIRONMENT
               value: "{{ .Values.media.env.environment }}"
+            - name: MEDIA_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: media-postgres-credentials
+                  key: database-url
+            - name: MEDIA_VALKEY_ADDR
+              value: "{{ .Values.datastores.valkey.mediaSession.serviceName }}:6379"
           readinessProbe:
             httpGet:
               path: /healthz

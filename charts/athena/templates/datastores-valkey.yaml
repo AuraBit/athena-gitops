@@ -1,0 +1,86 @@
+# datastores-valkey.yaml — two SEPARATELY-NAMED Valkey instances (D-18):
+# one for the storefront cart, one for media sessions. Not one shared
+# instance with two logical databases — this is the separate-store-per-
+# concern pattern that maps one-to-one onto Phase 6's two ElastiCache
+# instances, and it is why this template produces two full Deployment+
+# Service pairs rather than one Deployment with two Valkey DB indexes.
+#
+# CART CACHE-ADDRESS DECISION (RESEARCH.md Pitfall 4, resolved here ahead of
+# Plan 03-03/03-06's own read of this file): upstream's cartservice
+# hard-codes REDIS_ADDR=redis-cart:6379 as a literal Kubernetes Service DNS
+# name in its own manifests, not a Helm-templated value. This chart KEEPS
+# that exact Service name for the cart instance (values.yaml
+# datastores.valkey.cart.serviceName = "redis-cart", option a — "replace in
+# place", the simplest of the two documented options) rather than renaming
+# it and overriding cartservice's env var. Plan 03-06 must not rename this
+# Service or cartservice's cart persistence breaks silently.
+#
+# `dict` + `range` iterates in sorted-key order (cart, then mediaSession) —
+# deterministic, so re-rendering unchanged values reproduces byte-identical
+# output (this plan's own verification requirement).
+{{- range $key, $inst := (dict "cart" .Values.datastores.valkey.cart "mediaSession" .Values.datastores.valkey.mediaSession) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $inst.serviceName }}
+  labels:
+    app: {{ $inst.serviceName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $inst.serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $inst.serviceName }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # 999 is the official valkey image's own built-in "valkey" UID.
+        runAsUser: 999
+      containers:
+        - name: valkey
+          image: "{{ $.Values.datastores.valkey.image.repository }}:{{ $.Values.datastores.valkey.image.tag }}"
+          imagePullPolicy: {{ $.Values.datastores.valkey.image.pullPolicy }}
+          ports:
+            - name: valkey
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["valkey-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["valkey-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{ $.Values.datastores.valkey.resources.requests.cpu }}
+              memory: {{ $.Values.datastores.valkey.resources.requests.memory }}
+            limits:
+              cpu: {{ $.Values.datastores.valkey.resources.limits.cpu }}
+              memory: {{ $.Values.datastores.valkey.resources.limits.memory }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $inst.serviceName }}
+  labels:
+    app: {{ $inst.serviceName }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $inst.serviceName }}
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: valkey
+---
+{{- end }}
