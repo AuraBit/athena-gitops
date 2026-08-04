@@ -58,7 +58,7 @@ spec:
           value: "333333333333"
         - name: MEDIA_MAX_UPLOAD_SIZE_BYTES
           value: "8388608"
-        image: athena-registry:5000/athena-media:ede5af6
+        image: athena-registry:5000/athena-media:2f2e650
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
