@@ -354,6 +354,8 @@ spec:
     spec:
       containers:
       - env:
+        - name: DISABLE_PROFILER
+          value: "1"
         - name: PORT
           value: "7000"
         image: athena-registry:5000/athena-currencyservice:9034b09
@@ -585,6 +587,8 @@ spec:
     spec:
       containers:
       - env:
+        - name: DISABLE_PROFILER
+          value: "1"
         - name: PORT
           value: "50051"
         image: athena-registry:5000/athena-paymentservice:9034b09

@@ -188,6 +188,15 @@ shop:
       replicas: 1
       env:
         PORT: "7000"
+        # RULE 1 FIX, found live this session: currencyservice's
+        # @google-cloud/profiler dependency ships a native pprof addon
+        # that is MISSING for this build's musl/node ABI
+        # (node-v137-linux-x64-musl) — the process crash-loops on require()
+        # at startup unless DISABLE_PROFILER is set (checked for presence,
+        # not value, matching the Python services' identical pattern).
+        # This is a packaging defect in the vendored image, not a
+        # configuration choice this chart is opting into.
+        DISABLE_PROFILER: "1"
       securityContext:
         runAsUser: 1000
         readOnlyRootFilesystem: true
@@ -199,6 +208,11 @@ shop:
       replicas: 1
       env:
         PORT: "50051"
+        # RULE 1 FIX, found live this session — same broken native pprof
+        # addon as currencyservice above (identical stack trace,
+        # node-v137-linux-x64-musl missing pprof.node); DISABLE_PROFILER
+        # avoids the crash-loop.
+        DISABLE_PROFILER: "1"
       securityContext:
         runAsUser: 1000
         readOnlyRootFilesystem: true
