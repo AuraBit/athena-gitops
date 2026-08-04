@@ -1,0 +1,25 @@
+# shop-httproute.yaml — attaches shop-<env>.athena.net to the EXISTING
+# `athena` Gateway (same parentRef media-httproute.yaml already proves),
+# routing to the frontend Service only (D-20). Creates no new Certificate —
+# the wildcard `*.athena.net` cert the Gateway already terminates covers
+# this hostname too, exactly like media's route.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shop
+spec:
+  hostnames:
+    - "{{ .Values.shop.hostname }}"
+  parentRefs:
+    - name: athena
+      namespace: gateway
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: frontend
+          port: {{ .Values.shop.frontend.port }}
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
