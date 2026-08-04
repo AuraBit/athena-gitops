@@ -9,9 +9,17 @@
 # `docker buildx build --push` command used).
 media:
   image:
-    tag: "1847f1e" # athena-app@1847f1e (PR #7, merged) — adds Postgres/pgx data layer
-    # (Plan 03-04 Task 1, PR #6) and Valkey-backed sessions/login/logout/session
-    # gate (Plan 03-04 Task 2, PR #7) on top of the healthz tracer slice.
+    tag: "ede5af6" # athena-app@ede5af6 (PR #12, merged) — adds S3
+    # upload/fetch/list (Plan 03-05, Tasks 1-2) on top of Plan 03-04's
+    # Postgres/Valkey session slice.
   hostname: media-dev.athena.net
   env:
     environment: dev
+  s3:
+    # Terraform's real output (envs/dev/data-storage's media_bucket_name).
+    bucket: athena-media-dev
+    # Dev's simulated LocalStack account id (scripts/tf-env.sh) — used as
+    # BOTH the access key and secret key, matching every other Terraform
+    # invocation against this environment's simulated account.
+    accessKeyId: "111111111111"
+    secretAccessKey: "111111111111"

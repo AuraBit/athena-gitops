@@ -44,7 +44,21 @@ spec:
               name: media-postgres-credentials
         - name: MEDIA_VALKEY_ADDR
           value: media-valkey:6379
-        image: athena-registry:5000/athena-media:1847f1e
+        - name: MEDIA_S3_BUCKET
+          value: athena-media-dev
+        - name: MEDIA_S3_ENDPOINT
+          value: http://host.k3d.internal:4566
+        - name: MEDIA_S3_REGION
+          value: us-east-1
+        - name: MEDIA_S3_KEY_PREFIX
+          value: uploads/
+        - name: MEDIA_S3_ACCESS_KEY_ID
+          value: "111111111111"
+        - name: MEDIA_S3_SECRET_ACCESS_KEY
+          value: "111111111111"
+        - name: MEDIA_MAX_UPLOAD_SIZE_BYTES
+          value: "8388608"
+        image: athena-registry:5000/athena-media:ede5af6
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
