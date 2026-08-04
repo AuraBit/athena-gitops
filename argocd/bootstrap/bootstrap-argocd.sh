@@ -16,27 +16,14 @@
 # Safe to run twice: every step is idempotent (helm upgrade --install,
 # kubectl apply, SA/RBAC/Secret recreation-safe).
 #
-# RENDER PIPELINE (Plan 03-08 automates this as a workflow in this repo;
-# recorded here so that automation has an unambiguous target to replicate —
-# run from the repo root, athena-gitops/). One overlay directory per
-# deployable unit, per env (Plan 03-04, Task 3): the chart now carries more
-# than one unit's templates, so each render uses `--show-only` to select
-# only that unit's templates, keeping each unit's rendered output (and its
-# own ArgoCD child Application) independent of the others:
-#   helm template athena charts/athena \
-#     -f charts/athena/values.yaml -f charts/athena/values-dev.yaml \
-#     --show-only templates/media-deployment.yaml \
-#     --show-only templates/media-service.yaml \
-#     --show-only templates/media-httproute.yaml \
-#     > overlays/dev/rendered-input.yaml
-#   kustomize build overlays/dev > envs/dev/media/all.yaml
-#
-#   helm template athena charts/athena \
-#     -f charts/athena/values.yaml -f charts/athena/values-dev.yaml \
-#     --show-only templates/datastores-postgres.yaml \
-#     --show-only templates/datastores-valkey.yaml \
-#     > overlays/dev/datastores/rendered-input.yaml
-#   kustomize build overlays/dev/datastores > envs/dev/datastores/all.yaml
+# RENDER PIPELINE: scripts/render-env.sh is THE canonical implementation
+# (Plan 03-08, Task 1) — one overlay directory per deployable unit, per env
+# (Plan 03-04, Task 3), each unit selected via `helm template --show-only`
+# and folded through its overlay into envs/<env>/<unit>/all.yaml. Humans
+# run `scripts/render-env.sh <env> [unit]`; CI runs the same script from
+# .github/workflows/render.yml. The command sequence formerly duplicated in
+# this header lives only in that script now, so a rendered file can never
+# differ depending on who produced it.
 #
 # ArgoCD chart pin: argo/argo-cd chart 10.2.2 (appVersion v3.4.6). DEVIATION
 # from RESEARCH.md/CLAUDE.md's "pin to 3.5.0 directly" recommendation

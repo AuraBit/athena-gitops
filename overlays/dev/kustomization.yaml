@@ -38,3 +38,13 @@ kind: Kustomization
 namespace: dev
 resources:
   - rendered-input.yaml
+
+# The media image pin — the ENTIRE surface of the CI-to-CD handoff (D-22,
+# Plan 03-08). CI's gitops-handoff job edits ONLY the newTag value below;
+# promotion to stg/prod is copying this value into that environment's
+# overlay, and rollback is reverting the commit that changed it. The tag is
+# deliberately NOT in the chart's values files, where a chart change and an
+# image change would collide in the same diff.
+images:
+  - name: athena-registry:5000/athena-media
+    newTag: ede5af6 # media image pin — CI-to-CD handoff surface (D-22)

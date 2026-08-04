@@ -1,0 +1,98 @@
+name: render
+
+# Plan 03-08, Task 1 (D-28/D-29): the render CHECK — a thin caller of
+# scripts/render-env.sh, THE canonical render implementation.
+#
+# DESIGN (deviation from the plan's push-from-CI sketch, decided live and
+# recorded in protections.tf): GitHub's ruleset API silently drops an
+# Integration-type bypass for the Actions app, so a CI job can never push
+# to this repo's protected main. Instead of pushing, CI VERIFIES: whoever
+# changes the chart, an overlay, or the script must commit the re-rendered
+# envs/** in the same change (humans run scripts/render-env.sh locally;
+# media-ci.yml's gitops-handoff job renders in-job and pushes as
+# athena-ci-bot, the one User bypass actor). This keeps the invariant D-28
+# actually needs — rendered output in git is ALWAYS current with its
+# sources — and adds a determinism assertion on top.
+#
+# Both required properties are asserted, not assumed:
+#   Completeness — the check renders EVERY environment on any source
+#   change, so a template fix cannot land in one environment and silently
+#   miss another.
+#   Determinism — the render runs against the committed tree and must
+#   reproduce it byte-for-byte; a second render inside the script run
+#   would produce the identical result or this check fails.
+#
+# House style in full: SHA-pinned actions with trailing version comments,
+# read-only workflow baseline with per-job grants, and a `gate` aggregator
+# as the single stable required-check candidate — what lands in this
+# repository is applied to clusters automatically, so its CI is as
+# security-relevant as the app repository's.
+
+on:
+  pull_request:
+    paths:
+      - "charts/**"
+      - "overlays/**"
+      - "envs/**"
+      - "scripts/render-env.sh"
+      - ".github/workflows/render.yml"
+  push:
+    branches: [main]
+    paths:
+      - "charts/**"
+      - "overlays/**"
+      - "envs/**"
+      - "scripts/render-env.sh"
+      - ".github/workflows/render.yml"
+  workflow_dispatch: {} # a verification run can always be forced by hand
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-${{ github.ref }}
+  cancel-in-progress: true # pure verification — a superseded run has no value
+
+jobs:
+  render-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: render every environment (canonical script, no inline duplication)
+        run: |
+          set -euo pipefail
+          for values in charts/athena/values-*.yaml; do
+            env_name="$(basename "$values" .yaml)"; env_name="${env_name#values-}"
+            [ -d "overlays/${env_name}" ] || { echo "skip ${env_name}: no overlay"; continue; }
+            bash scripts/render-env.sh "${env_name}"
+          done
+
+      - name: assert committed rendered output is current and deterministic
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code envs/; then
+            echo "::error::envs/** is stale — the committed rendered output does not match a fresh render of the committed chart/overlays. Run 'scripts/render-env.sh <env>' for each environment and commit the result in the same change."
+            exit 1
+          fi
+          echo "rendered output is current: a fresh render reproduced the committed envs/** byte-for-byte"
+
+  gate:
+    needs: [render-check]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: evaluate aggregate result
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.render-check.result }}" != "success" ]; then
+            echo "gate: FAIL — render-check reported '${{ needs.render-check.result }}'"
+            exit 1
+          fi
+          echo "gate: PASS"
