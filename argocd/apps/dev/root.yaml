@@ -1,0 +1,32 @@
+# root.yaml — dev's app-of-apps root Application (D-31, D-32, D-33).
+#
+# destination.server is `https://kubernetes.default.svc` — the IN-CLUSTER
+# alias for the platform cluster ArgoCD itself runs on, NOT the app cluster.
+# The root Application's only job is to manage child Application objects
+# (media.yaml today; athena-shop and datastores land beside it in later
+# plans), which live on the hub (this cluster's own argocd namespace) —
+# CD-01's hub-and-spoke shape.
+#
+# source.path is this SAME directory (argocd/apps/dev), which includes this
+# file itself — deliberate, not a sync-loop bug: this is D-32's "Argo
+# manages Argo" pattern (the standard app-of-apps self-inclusion), applied
+# once by bootstrap-argocd.sh and thereafter reconciled by ArgoCD's own
+# sync against git, same as every child Application.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AuraBit/athena-gitops
+    path: argocd/apps/dev
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

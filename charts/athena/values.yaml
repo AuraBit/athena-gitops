@@ -1,0 +1,35 @@
+# values.yaml — shared defaults for every deployable unit in the Athena
+# chart (D-17). Structure is per-unit: `media:` today; `datastores:` (Plan
+# 03-04) and `shop:` (Plan 03-06) land beside it as siblings, never
+# restructuring this top level (CONTEXT.md's assumption-delta "promote"
+# decision — the media service and the future Boutique units are three
+# instances of the same machinery, not one special-cased original plus
+# bolt-ons).
+#
+# Values here are shared across every environment; values-<env>.yaml files
+# carry ONLY what genuinely differs per env (image tag, hostname, the
+# environment name itself) — never redeclare a value that doesn't change.
+media:
+  image:
+    # In-cluster pull address (athena-registry:5000), deliberately distinct
+    # from the host-side push address (localhost:5000) — same split Plan 01
+    # already established for the registry generally.
+    repository: athena-registry:5000/athena-media
+    tag: "" # REQUIRED override per env — the immutable short-SHA tag (D-22)
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    port: 8080
+  hostname: "" # REQUIRED override per env, e.g. media-dev.athena.net
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+  env:
+    httpPort: "8080" # matches service.port; kept separate since MEDIA_HTTP_PORT
+    # is the container's own listen port, not necessarily always equal to
+    # the Service's port in a future env
+    environment: "" # REQUIRED override per env — dev/stg/prod, MEDIA_ENVIRONMENT
