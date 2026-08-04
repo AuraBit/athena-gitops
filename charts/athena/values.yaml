@@ -113,3 +113,210 @@ datastores:
       # two are separately named Services so pointing media at the cart
       # instance is a visible configuration error, not a silent one.
       serviceName: media-valkey
+
+# shop (Plan 03-06, D-17): the rebranded Boutique storefront, authored fresh
+# in this chart from upstream's manifests read only as a reference spec
+# (ports, env vars, inter-service dependencies) — never copied wholesale.
+# `shop.services` is a map keyed by Kubernetes Service/Deployment name; the
+# range in templates/shop-services.yaml iterates it in sorted-key order
+# (same Sprig behaviour datastores-valkey.yaml's dict+range already
+# relies on), so adding a service here adds a Deployment+Service with no
+# template edit. frontend and loadgenerator are templated separately
+# (shop-frontend.yaml, shop-loadgenerator.yaml) because each carries
+# surface no other service does — the external route, and the
+# enable/disable + concurrency knobs, respectively.
+shop:
+  image:
+    # Each service's image is this repository plus "-<service-name>",
+    # e.g. athena-registry:5000/athena-cartservice — the exact naming
+    # scripts/build-all-images.sh already produces (D-16). One shared tag
+    # for the whole storefront build: every vendored service is rebuilt
+    # and retagged together, so there is exactly one "the storefront is
+    # built from this commit" answer, not eleven independently-drifting
+    # ones.
+    repository: athena-registry:5000/athena
+    tag: "" # REQUIRED override per env — the immutable short-SHA tag (D-22)
+    pullPolicy: IfNotPresent
+  hostname: "" # REQUIRED override per env, e.g. shop-dev.athena.net
+  # Backend services: gRPC-only, no external route. Every one of the ten
+  # services below implements the standard gRPC Health Checking Protocol
+  # (grpc.health.v1.Health — verified this session by reading each
+  # service's own source, not assumed), so every probe below is
+  # Kubernetes' native `grpc:` probe (GA since k8s 1.27; this estate's k3s
+  # is 1.35.5) — never an HTTP probe against a port that speaks gRPC, the
+  # exact copy-paste mistake this plan's action text warns against.
+  #
+  # None of these vendored images declare a non-root USER except
+  # cartservice's own (UID 1000, baked into its Dockerfile) — verified
+  # live this session via `docker image inspect --format '{{.Config.User}}'`
+  # against every built athena-<service> image. runAsUser: 1000 below is
+  # this chart's own choice (D-17: the estate authors its own security
+  # posture, not upstream's), applied uniformly and proven live in Task 3
+  # rather than assumed; readOnlyRootFilesystem defaults true with an
+  # `emptyDirTmp` escape hatch (mounts a writable /tmp) for any service a
+  # live rollout proves needs one — set per-service below with a comment
+  # naming the reason, never silently.
+  services:
+    cartservice:
+      port: 7070
+      replicas: 1
+      env:
+        # Upstream's own literal (RESEARCH.md Pitfall 4) — the cart
+        # Valkey Service keeps the name `redis-cart` (Plan 03-04 Task 3)
+        # specifically so this value needs no override mechanism, only a
+        # restatement of the address that Service name already resolves.
+        REDIS_ADDR: "redis-cart:6379"
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 96Mi }
+        limits: { cpu: 200m, memory: 192Mi }
+    productcatalogservice:
+      port: 3550
+      replicas: 1
+      env:
+        PORT: "3550"
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 200m, memory: 128Mi }
+    currencyservice:
+      port: 7000
+      replicas: 1
+      env:
+        PORT: "7000"
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 200m, memory: 128Mi }
+    paymentservice:
+      port: 50051
+      replicas: 1
+      env:
+        PORT: "50051"
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 200m, memory: 128Mi }
+    shippingservice:
+      port: 50051
+      replicas: 1
+      env:
+        PORT: "50051"
+        # Unset, shippingservice's own default polarity enables a
+        # background Stackdriver-profiler goroutine (a GCP call this
+        # estate has nothing to answer with) — DISABLE_PROFILER is only
+        # checked for presence, not value.
+        DISABLE_PROFILER: "1"
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 200m, memory: 128Mi }
+    emailservice:
+      port: 8080
+      replicas: 1
+      env:
+        PORT: "8080"
+        DISABLE_PROFILER: "1" # same reasoning as shippingservice above
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 96Mi }
+        limits: { cpu: 200m, memory: 192Mi }
+    recommendationservice:
+      port: 8080
+      replicas: 1
+      env:
+        PORT: "8080"
+        PRODUCT_CATALOG_SERVICE_ADDR: "productcatalogservice:3550"
+        DISABLE_PROFILER: "1" # same reasoning as shippingservice above
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 128Mi }
+        limits: { cpu: 250m, memory: 256Mi }
+    adservice:
+      port: 9555
+      replicas: 1
+      env:
+        PORT: "9555"
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        # A JVM service — the largest requests/limits of the backend set,
+        # proportionate to the JVM's own baseline footprint.
+        requests: { cpu: 100m, memory: 256Mi }
+        limits: { cpu: 300m, memory: 384Mi }
+    checkoutservice:
+      port: 5050
+      replicas: 1
+      env:
+        PORT: "5050"
+        SHIPPING_SERVICE_ADDR: "shippingservice:50051"
+        PRODUCT_CATALOG_SERVICE_ADDR: "productcatalogservice:3550"
+        CART_SERVICE_ADDR: "cartservice:7070"
+        CURRENCY_SERVICE_ADDR: "currencyservice:7000"
+        EMAIL_SERVICE_ADDR: "emailservice:8080"
+        PAYMENT_SERVICE_ADDR: "paymentservice:50051"
+      securityContext:
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 200m, memory: 128Mi }
+  # frontend: the one storefront workload with an external route (D-20)
+  # and the branding surface. The rebrand itself (Plan 03-03 Task 2) is a
+  # hardcoded template/asset edit inside the vendored frontend source, NOT
+  # a config-driven toggle (upstream's own CYMBAL_BRANDING env var is its
+  # unrelated two-way switch between ITS OWN demo identities, neither of
+  # which is Athena) — so there is no branding value to project here; the
+  # built athena-frontend image already serves Athena's name and logo.
+  frontend:
+    port: 8080
+    replicas: 1
+    env:
+      PRODUCT_CATALOG_SERVICE_ADDR: "productcatalogservice:3550"
+      CURRENCY_SERVICE_ADDR: "currencyservice:7000"
+      CART_SERVICE_ADDR: "cartservice:7070"
+      RECOMMENDATION_SERVICE_ADDR: "recommendationservice:8080"
+      CHECKOUT_SERVICE_ADDR: "checkoutservice:5050"
+      SHIPPING_SERVICE_ADDR: "shippingservice:50051"
+      AD_SERVICE_ADDR: "adservice:9555"
+      # shoppingassistantservice is excluded from this deploy (D-15
+      # amendment, UPSTREAM.md) — never deployed, no Service exists at
+      # this name. frontend's own mustMapEnv panics on an EMPTY value at
+      # startup but never dials this address unless the excluded
+      # /assistant or /bot route is actually invoked (never exercised by
+      # this plan's live proof) — a deliberately non-resolving address,
+      # not a mistake.
+      SHOPPING_ASSISTANT_SERVICE_ADDR: "shoppingassistantservice.excluded.invalid:9000"
+    securityContext:
+      runAsUser: 1000
+      readOnlyRootFilesystem: true
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 250m, memory: 128Mi }
+  # loadgenerator (D-15): free continuous traffic for Phase 4's dashboards
+  # and rollout analysis. Targets the in-cluster frontend Service, never
+  # the external hostname (routing internal synthetic traffic back out
+  # through the Gateway would distort exactly the metrics Phase 4 is about
+  # to measure).
+  loadgenerator:
+    enabled: true
+    users: 10
+    spawnRate: 1
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 200m, memory: 256Mi }

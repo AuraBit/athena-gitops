@@ -1,0 +1,86 @@
+# shop-frontend.yaml — the storefront frontend's Deployment and Service
+# (D-17), templated separately from shop-services.yaml because frontend is
+# the one workload with the branding surface and the external route
+# (shop-httproute.yaml).
+#
+# The rebrand (Plan 03-03 Task 2) is a hardcoded template/asset edit inside
+# the vendored frontend source, NOT a config-driven toggle — there is no
+# branding value to set here; the built athena-frontend image already
+# serves Athena's name and logo (values.yaml's shop.frontend comment has
+# the full reasoning). frontend serves plain HTTP (not gRPC) and exposes
+# its own liveness route at /_healthz (read from source this session,
+# frontend/main.go) — an HTTP probe is correct HERE, unlike every backend
+# service in shop-services.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: {{ .Values.shop.frontend.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.shop.frontend.securityContext.runAsUser }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.shop.image.repository }}-frontend:{{ .Values.shop.image.tag }}"
+          imagePullPolicy: {{ .Values.shop.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.shop.frontend.port }}
+          env:
+            - name: PORT
+              value: "{{ .Values.shop.frontend.port }}"
+            {{- range $k, $v := .Values.shop.frontend.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /_healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /_healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{ .Values.shop.frontend.resources.requests.cpu }}
+              memory: {{ .Values.shop.frontend.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.shop.frontend.resources.limits.cpu }}
+              memory: {{ .Values.shop.frontend.resources.limits.memory }}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: {{ .Values.shop.frontend.securityContext.readOnlyRootFilesystem }}
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: {{ .Values.shop.frontend.port }}
+      targetPort: http
