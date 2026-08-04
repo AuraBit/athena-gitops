@@ -1,10 +1,9 @@
 # values.yaml — shared defaults for every deployable unit in the Athena
-# chart (D-17). Structure is per-unit: `media:` today; `datastores:` (Plan
-# 03-04) and `shop:` (Plan 03-06) land beside it as siblings, never
-# restructuring this top level (CONTEXT.md's assumption-delta "promote"
-# decision — the media service and the future Boutique units are three
-# instances of the same machinery, not one special-cased original plus
-# bolt-ons).
+# chart (D-17). Structure is per-unit: `media:` and `datastores:` today;
+# `shop:` (Plan 03-06) lands beside them as a sibling, never restructuring
+# this top level (CONTEXT.md's assumption-delta "promote" decision — the
+# media service and the future Boutique units are three instances of the
+# same machinery, not one special-cased original plus bolt-ons).
 #
 # Values here are shared across every environment; values-<env>.yaml files
 # carry ONLY what genuinely differs per env (image tag, hostname, the
@@ -33,3 +32,59 @@ media:
     # is the container's own listen port, not necessarily always equal to
     # the Service's port in a future env
     environment: "" # REQUIRED override per env — dev/stg/prod, MEDIA_ENVIRONMENT
+
+# datastores (Plan 03-04, D-32): Postgres for the media schema, and TWO
+# separately-named Valkey instances — cart and media-session (D-18). Not
+# one shared instance with two logical databases: separate-store-per-concern
+# maps one-to-one onto Phase 6's two ElastiCache instances.
+datastores:
+  postgres:
+    image:
+      repository: postgres
+      tag: "18"
+      pullPolicy: IfNotPresent
+    # local-path is k3d's default dynamic provisioner — the $0 local stand-in
+    # for Phase 6's real EBS-backed RDS storage, not a production choice.
+    storageClassName: local-path
+    storageSize: 1Gi
+    database: media
+    username: media
+    # Plain literal, not a Vault reference (T-03-23, accepted disposition):
+    # Vault + External Secrets Operator is Phase 5's scope; this ordinary
+    # Kubernetes Secret is the deliberate starting point that phase
+    # demonstrably improves. Local-only, non-production credential.
+    password: media-postgres-dev-only
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  valkey:
+    image:
+      repository: valkey/valkey
+      tag: "8"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    cart:
+      # CART CACHE-ADDRESS DECISION (RESEARCH.md Pitfall 4): upstream's
+      # cartservice hard-codes REDIS_ADDR=redis-cart:6379 as a literal
+      # Kubernetes Service DNS name in its own manifests, not a
+      # Helm-templated value. This chart KEEPS that exact Service name
+      # (option a — "replace in place") for the cart Valkey instance rather
+      # than renaming it and overriding cartservice's env var. Plan 03-06
+      # must not rename this Service.
+      serviceName: redis-cart
+    mediaSession:
+      # The media service's own instance — never the cart instance (D-18).
+      # Wired into media's MEDIA_VALKEY_ADDR below by this exact name; the
+      # two are separately named Services so pointing media at the cart
+      # instance is a visible configuration error, not a silent one.
+      serviceName: media-valkey

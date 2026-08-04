@@ -1,0 +1,21 @@
+# kustomization.yaml — dev's DATASTORES-unit overlay, sibling to
+# ../kustomization.yaml (the media unit's overlay). Same D-28/D-29 pattern:
+# `helm template --show-only` selects only the datastores-*.yaml templates,
+# then this overlay folds them through Kustomize's namespace patch. The
+# committed output is ../../../envs/dev/datastores/all.yaml, synced by the
+# `datastores-dev` ArgoCD child Application
+# (argocd/apps/dev/datastores.yaml) — never this file or the chart
+# directly.
+#
+# Render command (run from the repo root, athena-gitops/):
+#   helm template athena charts/athena \
+#     -f charts/athena/values.yaml -f charts/athena/values-dev.yaml \
+#     --show-only templates/datastores-postgres.yaml \
+#     --show-only templates/datastores-valkey.yaml \
+#     > overlays/dev/datastores/rendered-input.yaml
+#   kustomize build overlays/dev/datastores > envs/dev/datastores/all.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dev
+resources:
+  - rendered-input.yaml

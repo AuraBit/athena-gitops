@@ -4,4 +4,4 @@
 # pipeline is the final, kustomize-patched result under envs/<env>/, never
 # this intermediate. Committing it would give ArgoCD (and reviewers) two
 # competing sources of truth for the same rendered content.
-overlays/*/rendered-input.yaml
+overlays/**/rendered-input.yaml

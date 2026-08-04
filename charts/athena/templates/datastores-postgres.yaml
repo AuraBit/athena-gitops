@@ -1,0 +1,139 @@
+# datastores-postgres.yaml — Postgres workload backing the media service's
+# schema (D-32: deployed and ArgoCD-synced like every other unit, never
+# hand-applied). T-03-23 (accepted): credentials come from an ordinary
+# Kubernetes Secret, not Vault — Vault + External Secrets Operator is Phase
+# 5's scope, and this plain-Secret starting point is the deliberate
+# baseline that phase demonstrably improves on.
+#
+# A single-replica Deployment + PVC (not a StatefulSet) is a deliberate
+# simplification for this $0 local demo: Postgres has no multi-writer story
+# at this scale, so a StatefulSet's ordinal-identity guarantees buy nothing
+# at replicas: 1. Phase 6's real RDS Postgres is where the managed-service
+# HA story actually lives — this is a local stand-in only, not a production
+# pattern.
+#
+# Migrations are NOT run by this template (Task 3's explicit deferral): they
+# are run by hand against this in-cluster database for now —
+#   kubectl --context k3d-app -n dev port-forward svc/media-postgres 15432:5432
+#   MEDIA_DATABASE_URL="postgresql://media:media-postgres-dev-only@localhost:15432/media?sslmode=disable" \
+#     migrate -path src/media/migrations -database "$MEDIA_DATABASE_URL" up
+# Turning this into an init container or a Kubernetes Job is a real
+# refinement but is out of this phase's requirements (flagged_assumptions);
+# Plan 03-07 covers migrations in CI instead.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: media-postgres-credentials
+type: Opaque
+stringData:
+  postgres-password: {{ .Values.datastores.postgres.password | quote }}
+  # The full DSN the media Deployment consumes via MEDIA_DATABASE_URL
+  # (secretKeyRef) — never rendered in plain text in any Deployment env
+  # value, only inside this Secret.
+  database-url: "postgresql://{{ .Values.datastores.postgres.username }}:{{ .Values.datastores.postgres.password }}@media-postgres:5432/{{ .Values.datastores.postgres.database }}?sslmode=disable"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-postgres-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.datastores.postgres.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.datastores.postgres.storageSize }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-postgres
+  labels:
+    app: media-postgres
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate: a rolling update against a single
+    # ReadWriteOnce PVC deadlocks (the new pod stays Pending waiting for a
+    # volume the old pod still holds) — Recreate is correct here, not a
+    # placeholder.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: media-postgres
+  template:
+    metadata:
+      labels:
+        app: media-postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # 999 is the official postgres image's own built-in "postgres" UID.
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: "{{ .Values.datastores.postgres.image.repository }}:{{ .Values.datastores.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.datastores.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.datastores.postgres.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.datastores.postgres.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: media-postgres-credentials
+                  key: postgres-password
+            # A subdirectory of the mount, not the mount root — the
+            # standard workaround that lets Postgres run as a non-root,
+            # explicit numeric UID without the image's own root-then-gosu
+            # entrypoint dance (the mount root itself carries a lost+found
+            # directory Postgres's own initdb refuses to run against).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.datastores.postgres.username | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.datastores.postgres.username | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{ .Values.datastores.postgres.resources.requests.cpu }}
+              memory: {{ .Values.datastores.postgres.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.datastores.postgres.resources.limits.cpu }}
+              memory: {{ .Values.datastores.postgres.resources.limits.memory }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: media-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-postgres
+  labels:
+    app: media-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: media-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
