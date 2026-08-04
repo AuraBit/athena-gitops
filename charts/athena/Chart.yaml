@@ -1,0 +1,13 @@
+# Chart.yaml — the Athena estate's own hand-authored Helm chart (D-17).
+#
+# One chart, per-deployable-unit template groups: `media-*.yaml` today,
+# `datastores-*.yaml` (Plan 03-04/03-06) and `shop-*.yaml`/whole-Boutique
+# templates land beside it later, never as a second chart. Upstream Boutique
+# manifests are used only as a reference spec for ports/env vars/dependencies
+# (D-17) — nothing here is copied YAML.
+apiVersion: v2
+name: athena
+description: Athena estate Helm chart — one chart, per-deployable-unit template groups
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

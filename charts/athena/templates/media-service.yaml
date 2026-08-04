@@ -1,0 +1,17 @@
+# media-service.yaml — ClusterIP Service fronting the media Deployment,
+# port 8080 (D-17). The HTTPRoute (media-httproute.yaml) is what actually
+# exposes this outside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: media
+  labels:
+    app: media
+spec:
+  type: ClusterIP
+  selector:
+    app: media
+  ports:
+    - name: http
+      port: {{ .Values.media.service.port }}
+      targetPort: http

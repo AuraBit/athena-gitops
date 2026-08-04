@@ -1,0 +1,34 @@
+# media.yaml — the first child Application of dev's app-of-apps root
+# (D-31, D-33). source.path points at the RENDERED directory
+# (envs/dev/media) — never charts/ or overlays/ — the D-28 contract that
+# what ArgoCD applies is exactly what a reviewer reads in the diff.
+#
+# destination.server is the app cluster's own reachable in-network address —
+# its serverlb container's IP on the k3d-app docker network, proven live in
+# Plan 03-01 Task 1 (a debug pod on the platform cluster received a TLS
+# HTTP 401 from this exact address on port 6443) and carried forward here
+# verbatim, per that task's own instruction not to re-guess it. This value
+# is this-host-specific (docker assigns it at container-creation time) —
+# re-derive with `docker inspect k3d-app-serverlb --format
+# '{{(index .NetworkSettings.Networks "k3d-app").IPAddress}}'` and update
+# this file (and bootstrap-argocd.sh's own re-derivation for the cluster
+# Secret) if this estate is ever rebuilt on a different host or the
+# containers are recreated with new addresses.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: media-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AuraBit/athena-gitops
+    path: envs/dev/media
+    targetRevision: main
+  destination:
+    server: https://172.18.0.3:6443
+    namespace: dev
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

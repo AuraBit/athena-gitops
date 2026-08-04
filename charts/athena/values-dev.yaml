@@ -1,0 +1,15 @@
+# values-dev.yaml — dev's overrides only (image tag, hostname, environment
+# name). Everything else inherits values.yaml's shared defaults.
+#
+# The image tag is the immutable short-SHA of the athena-app commit this
+# image was built from (D-22 — never `latest`, never retagged). Plan 03-07's
+# CI takes over bumping this value on every merge to athena-app's main; this
+# task sets it by hand, once, as the tracer's one deliberate manual step
+# (recorded verbatim in this task's commit message alongside the exact
+# `docker buildx build --push` command used).
+media:
+  image:
+    tag: "1492910" # athena-app@1492910 (PR #5, merged) — media: healthz tracer slice
+  hostname: media-dev.athena.net
+  env:
+    environment: dev

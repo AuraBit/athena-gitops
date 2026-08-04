@@ -1,0 +1,66 @@
+# media-deployment.yaml — the media service's Deployment (D-17).
+#
+# securityContext is not decorative: runAsNonRoot + readOnlyRootFilesystem +
+# all capabilities dropped matches the distroless nonroot image itself
+# (athena-app src/media/Dockerfile, D-10) — the pod spec and the image it
+# runs make the same claim twice, so one drifting out of sync with the other
+# is a visible contradiction, not a silent gap.
+#
+# Both probes hit /healthz — the only route this phase's media service
+# exposes (T-03-05 mitigation: explicit resource requests/limits below,
+# asserted by the rendered manifest per this plan's must_haves).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media
+  labels:
+    app: media
+spec:
+  replicas: {{ .Values.media.replicaCount }}
+  selector:
+    matchLabels:
+      app: media
+  template:
+    metadata:
+      labels:
+        app: media
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: media
+          image: "{{ .Values.media.image.repository }}:{{ .Values.media.image.tag }}"
+          imagePullPolicy: {{ .Values.media.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.media.service.port }}
+          env:
+            - name: MEDIA_HTTP_PORT
+              value: "{{ .Values.media.env.httpPort }}"
+            - name: MEDIA_ENVIRONMENT
+              value: "{{ .Values.media.env.environment }}"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{ .Values.media.resources.requests.cpu }}
+              memory: {{ .Values.media.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.media.resources.limits.cpu }}
+              memory: {{ .Values.media.resources.limits.memory }}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
