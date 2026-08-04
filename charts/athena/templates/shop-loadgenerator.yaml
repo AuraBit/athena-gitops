@@ -1,0 +1,71 @@
+{{- if .Values.shop.loadgenerator.enabled }}
+# shop-loadgenerator.yaml — continuous synthetic storefront traffic (D-15).
+#
+# This workload exists to give Phase 4's dashboards and Argo Rollouts
+# analysis free, real signal — it is deliberately load-bearing for a LATER
+# phase, not apparently pointless busywork; do not remove it as unused.
+#
+# Targets the IN-CLUSTER frontend Service (FRONTEND_ADDR=frontend:<port>),
+# never the external shop-<env>.athena.net hostname — routing internal
+# synthetic traffic back out through the Gateway would distort exactly the
+# request-rate/latency metrics Phase 4 is about to build dashboards and
+# rollout-analysis gates against.
+#
+# `enabled` lets any environment (prod, most obviously) switch this off
+# entirely without a template change — carrying synthetic purchase traffic
+# in a prod-shaped environment forever is not a pattern worth cementing.
+# The enable guard at the very top of this file wraps the ENTIRE file,
+# comments included — a comment-only leftover mentioning "loadgenerator"
+# would still make a disabled render non-empty, which is exactly what this
+# plan's own acceptance criterion (disabled render produces zero matches
+# for the string "loadgenerator") checks for.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgenerator
+  labels:
+    app: loadgenerator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadgenerator
+  template:
+    metadata:
+      labels:
+        app: loadgenerator
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: loadgenerator
+          image: "{{ .Values.shop.image.repository }}-loadgenerator:{{ .Values.shop.image.tag }}"
+          imagePullPolicy: {{ .Values.shop.image.pullPolicy }}
+          env:
+            - name: FRONTEND_ADDR
+              value: "frontend:{{ .Values.shop.frontend.port }}"
+            - name: USERS
+              value: "{{ .Values.shop.loadgenerator.users }}"
+            - name: RATE
+              value: "{{ .Values.shop.loadgenerator.spawnRate }}"
+          resources:
+            requests:
+              cpu: {{ .Values.shop.loadgenerator.resources.requests.cpu }}
+              memory: {{ .Values.shop.loadgenerator.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.shop.loadgenerator.resources.limits.cpu }}
+              memory: {{ .Values.shop.loadgenerator.resources.limits.memory }}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false
+            # locust writes its own working files under /loadgen at
+            # runtime — a read-only root filesystem here isn't the
+            # non-root/dropped-capabilities posture every other workload
+            # in this chart carries; documented per-service exception per
+            # this plan's own house rule (values.yaml's shop.services
+            # comment), not a silent blanket relaxation.
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+{{- end }}
