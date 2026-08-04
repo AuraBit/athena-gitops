@@ -3,13 +3,20 @@
 # (envs/dev/media) — never charts/ or overlays/ — the D-28 contract that
 # what ArgoCD applies is exactly what a reviewer reads in the diff.
 #
-# destination.server is the app cluster's own reachable in-network address —
-# its serverlb container's IP on the k3d-app docker network, proven live in
-# Plan 03-01 Task 1 (a debug pod on the platform cluster received a TLS
-# HTTP 401 from this exact address on port 6443) and carried forward here
-# verbatim, per that task's own instruction not to re-guess it. This value
-# is this-host-specific (docker assigns it at container-creation time) —
-# re-derive with `docker inspect k3d-app-serverlb --format
+# destination.server is the app cluster's own k3s SERVER NODE address on
+# the k3d-app docker network — NOT the serverlb's address. DEVIATION
+# (Rule 1 — bug, found live): Task 1 proved network+TLS-handshake
+# reachability against the serverlb (a pure TCP-passthrough nginx proxy,
+# so any address reaches the same backend at the transport level), but
+# ArgoCD's cluster registration validates the app cluster's real serving
+# certificate against its actual SAN list, which does not include the
+# serverlb's IP — proven live: ArgoCD reported `x509: certificate is valid
+# for 0.0.0.0, 10.43.0.1, 127.0.0.1, 172.18.0.2, 172.18.0.6, ::1, not
+# 172.18.0.3` (the serverlb's address) before this fix. 172.18.0.6 (the
+# k3s server node's own docker-network IP) IS in that SAN list.
+#
+# This value is this-host-specific (docker assigns it at container-creation
+# time) — re-derive with `docker inspect k3d-app-server-0 --format
 # '{{(index .NetworkSettings.Networks "k3d-app").IPAddress}}'` and update
 # this file (and bootstrap-argocd.sh's own re-derivation for the cluster
 # Secret) if this estate is ever rebuilt on a different host or the
@@ -26,7 +33,7 @@ spec:
     path: envs/dev/media
     targetRevision: main
   destination:
-    server: https://172.18.0.3:6443
+    server: https://172.18.0.6:6443
     namespace: dev
   syncPolicy:
     automated:
