@@ -1,0 +1,104 @@
+# shop-services.yaml — Deployments and Services for the ten in-scope
+# backend Boutique services (D-17). Hand-authored fresh; upstream's own
+# `kubernetes-manifests/`/`helm-chart/` were read only as a reference spec
+# (ports, env vars, inter-service dependencies — see
+# athena-app/docs/upstream-reference/README.md) and never copied.
+#
+# One range over `.Values.shop.services` (a map, iterated in sorted-key
+# order — the same deterministic Sprig behaviour datastores-valkey.yaml's
+# dict+range already relies on) produces a full Deployment+Service pair per
+# service: adding a service is a values change, not a template edit.
+#
+# Every service here is gRPC-only with no external route — frontend
+# (shop-frontend.yaml) is the one workload with a route, and the traffic
+# generator (its own sibling template) is templated separately because it
+# carries its own enable/disable and concurrency knobs. Every one of the
+# ten services below implements the standard gRPC Health Checking Protocol
+# (grpc.health.v1.Health) — verified this session by reading each
+# service's own source (see values.yaml's shop.services comment) — so
+# every probe is Kubernetes' native `grpc:` probe, never an HTTP probe
+# against a port that speaks gRPC.
+{{- range $name, $svc := .Values.shop.services }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ $svc.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $svc.securityContext.runAsUser }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.shop.image.repository }}-{{ $name }}:{{ $.Values.shop.image.tag }}"
+          imagePullPolicy: {{ $.Values.shop.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ $svc.port }}
+          {{- if $svc.env }}
+          env:
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- end }}
+          readinessProbe:
+            grpc:
+              port: {{ $svc.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            grpc:
+              port: {{ $svc.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{ $svc.resources.requests.cpu }}
+              memory: {{ $svc.resources.requests.memory }}
+            limits:
+              cpu: {{ $svc.resources.limits.cpu }}
+              memory: {{ $svc.resources.limits.memory }}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: {{ $svc.securityContext.readOnlyRootFilesystem }}
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          {{- if $svc.emptyDirTmp }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          {{- end }}
+      {{- if $svc.emptyDirTmp }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $name }}
+  ports:
+    - name: grpc
+      port: {{ $svc.port }}
+      targetPort: grpc
+---
+{{- end }}

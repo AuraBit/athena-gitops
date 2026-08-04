@@ -23,3 +23,10 @@ media:
     # invocation against this environment's simulated account.
     accessKeyId: "111111111111"
     secretAccessKey: "111111111111"
+
+shop:
+  image:
+    tag: "9034b09" # athena-app@9034b09 (PR #10, merged) — Plan 03-03 Task 3's
+    # build-all-images.sh run; all 11 in-scope athena-<service> images
+    # exist in the local registry at this tag.
+  hostname: shop-dev.athena.net
