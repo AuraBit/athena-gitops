@@ -143,18 +143,33 @@ fi
 ok "app-cluster ServiceAccount token + CA retrieved (never printed)"
 
 # ---------------------------------------------------------------------------
-# 3. Resolve the app cluster's authoritative in-network server URL — its
-#    serverlb container's own IP on the k3d-app docker network, the same
-#    address apply-coredns-custom.sh (estate/athena-infra, Task 1) already
-#    proved reachable from the platform cluster. Never hard-coded: docker
-#    assigns this address at container-creation time.
+# 3. Resolve the app cluster's authoritative in-network server URL.
+#
+# DEVIATION (Rule 1 — bug, found live at execution): Task 1's own probe used
+# the k3d-app-serverlb container's IP (its docker-network reachability test
+# only needs network-level TCP+TLS-handshake success, and a 401 response
+# proves that regardless of which cert SAN is presented). ArgoCD's cluster
+# registration is stricter — it validates the app cluster's real serving
+# certificate against the caData this script reads from the app cluster's
+# own ServiceAccount token Secret, and that certificate's SAN list does NOT
+# include the serverlb's address: `k3d-app-serverlb` is a pure TCP-passthrough
+# nginx proxy (confirmed live, estate/athena-infra/clusters — no TLS
+# termination happens there), so the k3s apiserver process never has a
+# reason to include the serverlb's own IP in its serving cert's SAN list.
+# The address that IS in that SAN list is the k3s SERVER NODE's own IP
+# (k3d-app-server-0), proven live: `kubectl -n argocd get application
+# media-dev -o yaml` initially reported `x509: certificate is valid for
+# 0.0.0.0, 10.43.0.1, 127.0.0.1, 172.18.0.2, 172.18.0.6, ::1, not
+# 172.18.0.3` (the serverlb IP) before this fix.
+#
+# Never hard-coded: docker assigns this address at container-creation time.
 # ---------------------------------------------------------------------------
-APP_SERVERLB_IP="$(docker inspect k3d-app-serverlb --format '{{(index .NetworkSettings.Networks "k3d-app").IPAddress}}' 2>/dev/null)" || APP_SERVERLB_IP=""
-if [ -z "${APP_SERVERLB_IP}" ]; then
-  fail "could not resolve k3d-app-serverlb's IP on the k3d-app network — has estate/athena-infra/scripts/apply-coredns-custom.sh (Task 1) been run yet?"
+APP_SERVER_NODE_IP="$(docker inspect k3d-app-server-0 --format '{{(index .NetworkSettings.Networks "k3d-app").IPAddress}}' 2>/dev/null)" || APP_SERVER_NODE_IP=""
+if [ -z "${APP_SERVER_NODE_IP}" ]; then
+  fail "could not resolve k3d-app-server-0's IP on the k3d-app network — has estate/athena-infra/scripts/apply-coredns-custom.sh (Task 1) been run yet?"
   exit 1
 fi
-APP_CLUSTER_SERVER="https://${APP_SERVERLB_IP}:6443"
+APP_CLUSTER_SERVER="https://${APP_SERVER_NODE_IP}:6443"
 info "app cluster server URL (registered as ArgoCD's remote destination): ${APP_CLUSTER_SERVER}"
 
 # ---------------------------------------------------------------------------
