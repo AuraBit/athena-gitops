@@ -16,6 +16,11 @@
 # Valkey Service explicitly (datastores.valkey.mediaSession.serviceName) —
 # never the cart instance (D-18); grep -c 'cart' against the rendered
 # output must stay 0.
+#
+# The MEDIA_S3_* settings (Plan 03-05) project .Values.media.s3 verbatim —
+# see that block's own comments in values.yaml for why the simulated
+# credentials are acceptable as plain values here (D-16, non-secret by
+# construction) while MEDIA_DATABASE_URL above is not.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -64,6 +69,20 @@ spec:
                   key: database-url
             - name: MEDIA_VALKEY_ADDR
               value: "{{ .Values.datastores.valkey.mediaSession.serviceName }}:6379"
+            - name: MEDIA_S3_BUCKET
+              value: "{{ .Values.media.s3.bucket }}"
+            - name: MEDIA_S3_ENDPOINT
+              value: "{{ .Values.media.s3.endpoint }}"
+            - name: MEDIA_S3_REGION
+              value: "{{ .Values.media.s3.region }}"
+            - name: MEDIA_S3_KEY_PREFIX
+              value: "{{ .Values.media.s3.keyPrefix }}"
+            - name: MEDIA_S3_ACCESS_KEY_ID
+              value: "{{ .Values.media.s3.accessKeyId }}"
+            - name: MEDIA_S3_SECRET_ACCESS_KEY
+              value: "{{ .Values.media.s3.secretAccessKey }}"
+            - name: MEDIA_MAX_UPLOAD_SIZE_BYTES
+              value: "{{ .Values.media.s3.maxUploadSizeBytes }}"
           readinessProbe:
             httpGet:
               path: /healthz

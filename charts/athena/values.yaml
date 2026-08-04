@@ -32,6 +32,31 @@ media:
     # is the container's own listen port, not necessarily always equal to
     # the Service's port in a future env
     environment: "" # REQUIRED override per env — dev/stg/prod, MEDIA_ENVIRONMENT
+  # S3 settings (Plan 03-05, D-02, D-07): the bucket Terraform's data-storage
+  # stack creates, addressed through the in-cluster host alias fixed in
+  # Plan 03-01 — never the loopback address that only works from the host.
+  s3:
+    bucket: "" # REQUIRED override per env — Terraform's real media_bucket_name output
+    # Shared across every env: every env's LocalStack instance lives at the
+    # same host-level address (docker-compose binds 0.0.0.0:4566), so this
+    # is not itself an env-specific value the way the bucket name is.
+    endpoint: "http://host.k3d.internal:4566"
+    region: us-east-1
+    keyPrefix: "uploads/"
+    maxUploadSizeBytes: "8388608" # 8 MiB — a small number of megabytes,
+    # proportionate to a demo image service; exposed as configuration
+    # (never a literal in the handler) so it can be driven down cheaply for
+    # testing.
+    # Simulated per-environment LocalStack credentials (D-16) — non-secret
+    # by construction: they are LocalStack's account-namespacing mechanism
+    # (which simulated account a request lands in), NOT an authorisation
+    # credential. Plain values are acceptable ONLY because of that — this
+    # exact pattern (a literal access key/secret in a values file) would be
+    # actively wrong the moment these targeted a real AWS account; do not
+    # copy it where that distinction doesn't hold. REQUIRED override per
+    # env, matching scripts/tf-env.sh's per-env simulated account id.
+    accessKeyId: ""
+    secretAccessKey: ""
 
 # datastores (Plan 03-04, D-32): Postgres for the media schema, and TWO
 # separately-named Valkey instances — cart and media-session (D-18). Not
