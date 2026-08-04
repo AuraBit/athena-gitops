@@ -71,6 +71,7 @@ spec:
           runAsNonRoot: true
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

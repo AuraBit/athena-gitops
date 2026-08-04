@@ -27,6 +27,17 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        # 65532 is gcr.io/distroless's well-known nonroot UID (its own
+        # nonroot image variants map the symbolic `nonroot` USER to this
+        # numeric UID). Required, not decorative (Rule 1 — bug, found live):
+        # the distroless static image ships no /etc/passwd at all, so
+        # kubelet cannot resolve the image's symbolic `USER nonroot`
+        # directive to a numeric UID to satisfy runAsNonRoot's admission
+        # check on its own — without an explicit numeric runAsUser here,
+        # the container fails to start with
+        # "container has runAsNonRoot and image has non-numeric user
+        # (nonroot), cannot verify user is non-root".
+        runAsUser: 65532
       containers:
         - name: media
           image: "{{ .Values.media.image.repository }}:{{ .Values.media.image.tag }}"
