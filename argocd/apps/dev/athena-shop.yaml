@@ -1,0 +1,32 @@
+# athena-shop.yaml — the storefront unit's child Application under dev's
+# app-of-apps root (D-31, D-32). Third child alongside media.yaml and
+# datastores.yaml. source.path points at the RENDERED directory
+# (envs/dev/athena-shop) — never charts/ or overlays/ — the same D-28
+# contract media.yaml and datastores.yaml already established: what
+# ArgoCD applies is exactly what a reviewer reads in the diff.
+#
+# destination.server matches media.yaml's and datastores.yaml's: the app
+# cluster's own k3s SERVER NODE address on the k3d-app docker network (NOT
+# the serverlb's address — see media.yaml's header comment for the live
+# x509 SAN evidence this was proven against in Plan 03-01). This value is
+# this-host-specific — re-derive with `docker inspect k3d-app-server-0
+# --format '{{(index .NetworkSettings.Networks "k3d-app").IPAddress}}'` if
+# this estate is ever rebuilt on a different host.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: athena-shop-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AuraBit/athena-gitops
+    path: envs/dev/athena-shop
+    targetRevision: main
+  destination:
+    server: https://172.18.0.6:6443
+    namespace: dev
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
