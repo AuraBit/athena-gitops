@@ -1,0 +1,23 @@
+# kustomization.yaml — dev's SHOP-unit overlay, sibling to
+# ../kustomization.yaml (media) and ../datastores/kustomization.yaml
+# (datastores). Same D-28/D-29 pattern: `helm template --show-only` selects
+# only the shop-*.yaml templates, then this overlay folds them through
+# Kustomize's namespace patch. The committed output is
+# ../../../envs/dev/athena-shop/all.yaml, synced by the `athena-shop-dev`
+# ArgoCD child Application (argocd/apps/dev/athena-shop.yaml) — never this
+# file or the chart directly.
+#
+# Render command (run from the repo root, athena-gitops/):
+#   helm template athena charts/athena \
+#     -f charts/athena/values.yaml -f charts/athena/values-dev.yaml \
+#     --show-only templates/shop-services.yaml \
+#     --show-only templates/shop-frontend.yaml \
+#     --show-only templates/shop-httproute.yaml \
+#     --show-only templates/shop-loadgenerator.yaml \
+#     > overlays/dev/shop/rendered-input.yaml
+#   kustomize build overlays/dev/shop > envs/dev/athena-shop/all.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dev
+resources:
+  - rendered-input.yaml
