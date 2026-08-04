@@ -1,0 +1,159 @@
+name: promote
+
+# Plan 03-09, Task 2 (D-30; CD-04's gated half): manually dispatched
+# promotion that copies an image tag FORWARD through the chain
+# dev -> stg -> prod, shows the reviewer the exact rendered diff, pauses on
+# the target GitHub Environment for required-reviewer approval, and only
+# then commits — as athena-ci-bot, the same credential and rationale as the
+# dev handoff (media-ci.yml's gitops-handoff job).
+#
+# NO FREE-TEXT TAG INPUT, by design: the tag is READ from the source
+# environment's own pin (stg promotes what dev runs; prod promotes what stg
+# runs), so a promotion can never introduce a tag no lower environment is
+# running. Accepting an arbitrary tag would make the whole chain advisory —
+# expect that "convenience" to be proposed someday; refuse it.
+#
+# ROLLBACK (the other half of the promotion story): revert the promotion
+# commit. That restores the previous pin AND the previous rendered
+# manifests together, and ArgoCD syncs the revert exactly as it synced the
+# promotion — no rebuild, no registry interaction, one revert:
+#   git revert <promotion-sha> && git push
+#
+# Approval sits BETWEEN resolve and commit: a rejected or abandoned run has
+# committed nothing, structurally.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Environment to promote INTO (stg promotes from dev, prod from stg)"
+        required: true
+        type: choice
+        options: [stg, prod]
+      unit:
+        description: "Deployable unit whose pin is promoted"
+        required: true
+        type: choice
+        options: [media]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-${{ github.event.inputs.target_environment }}
+  cancel-in-progress: false # promotions queue; approvals must never race
+
+jobs:
+  # -------------------------------------------------------------------
+  # resolve — pre-approval: reads the SOURCE env's pin, refuses the
+  # impossible promotions with a clear message, renders the target with
+  # the candidate tag against a SCRATCH copy, and publishes the diff to
+  # the run summary so the approval that follows is informed, not a
+  # rubber stamp. Commits nothing.
+  # -------------------------------------------------------------------
+  resolve:
+    runs-on: [self-hosted, linux, x64, athena-local] # needs the registry at localhost:5000 for tag-existence refusal
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: resolve source pin and refuse impossible promotions
+        id: resolve
+        run: |
+          set -euo pipefail
+          TARGET="${{ github.event.inputs.target_environment }}"
+          UNIT="${{ github.event.inputs.unit }}"
+          case "$TARGET" in
+            stg)  SOURCE=dev ;;
+            prod) SOURCE=stg ;;
+            *) echo "::error::unknown target environment '$TARGET' — promotion chain is dev->stg->prod only"; exit 1 ;;
+          esac
+          read_pin() { # env -> current newTag of the unit's pin
+            sed -nE 's/^\s*newTag:\s*(\S+).*/\1/p' "overlays/$1/kustomization.yaml" | head -1
+          }
+          SRC_TAG="$(read_pin "$SOURCE")"
+          TGT_TAG="$(read_pin "$TARGET")"
+          [ -n "$SRC_TAG" ] || { echo "::error::could not read $SOURCE's image pin"; exit 1; }
+          if [ "$SRC_TAG" = "$TGT_TAG" ]; then
+            echo "::error::nothing to promote — $TARGET already runs $SOURCE's tag ($SRC_TAG)"; exit 1
+          fi
+          # A tag the registry cannot serve produces a cluster stuck
+          # pulling an image that will never arrive — refuse HERE.
+          if ! curl -fsS "http://localhost:5000/v2/athena-media/tags/list" \
+              | python3 -c "import sys,json;d=json.load(sys.stdin);sys.exit(0 if '$SRC_TAG' in (d.get('tags') or []) else 1)"; then
+            echo "::error::tag athena-media:$SRC_TAG is not in the registry — refusing to promote an unservable image"; exit 1
+          fi
+          echo "tag=$SRC_TAG" >> "$GITHUB_OUTPUT"
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+
+      - name: render the target with the candidate tag — diff into the run summary
+        run: |
+          set -euo pipefail
+          TARGET="${{ github.event.inputs.target_environment }}"
+          TAG="${{ steps.resolve.outputs.tag }}"
+          sed -i -E "s|^(\s*newTag:\s*)\S+(\s*#.*)?$|\1${TAG}\2|" "overlays/${TARGET}/kustomization.yaml"
+          bash scripts/render-env.sh "${TARGET}"
+          {
+            echo "## Promotion diff — ${TARGET} -> athena-media:${TAG}"
+            echo ""
+            echo '```diff'
+            git diff -- "overlays/${TARGET}" "envs/${TARGET}" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          git checkout -- . # scratch copy only — this job commits NOTHING
+
+  # -------------------------------------------------------------------
+  # commit — post-approval: declaring the target GitHub Environment is
+  # what pauses this job for the required reviewers governance assigns
+  # (environments.tf: the human developer, never the bot). Only after
+  # approval does the pin move and the render land, committed as the bot.
+  # -------------------------------------------------------------------
+  commit:
+    needs: [resolve]
+    environment: ${{ github.event.inputs.target_environment }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # the push uses the bot's own credential, not this token
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          token: ${{ secrets.ATHENA_CI_BOT_TOKEN }}
+          persist-credentials: true
+
+      - name: write the pin, render, commit as the bot
+        run: |
+          set -euo pipefail
+          TARGET="${{ github.event.inputs.target_environment }}"
+          TAG="${{ needs.resolve.outputs.tag }}"
+          case "$TARGET" in stg) SOURCE=dev ;; prod) SOURCE=stg ;; esac
+          sed -i -E "s|^(\s*newTag:\s*)\S+(\s*#.*)?$|\1${TAG}\2|" "overlays/${TARGET}/kustomization.yaml"
+          bash scripts/render-env.sh "${TARGET}"
+          git config user.name  "athena-ci-bot"
+          git config user.email "athena-ci-bot@users.noreply.github.com"
+          git add "overlays/${TARGET}" "envs/${TARGET}"
+          git commit -m "promote(${TARGET}): athena-media ${TAG} (${SOURCE} -> ${TARGET})"
+          git push origin HEAD:main
+
+  gate:
+    needs: [resolve, commit]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: evaluate aggregate result
+        run: |
+          set -euo pipefail
+          for leg in "resolve:${{ needs.resolve.result }}" "commit:${{ needs.commit.result }}"; do
+            name="${leg%%:*}"; result="${leg##*:}"
+            if [ "$result" != "success" ]; then
+              echo "gate: FAIL — ${name} reported '${result}'"
+              exit 1
+            fi
+          done
+          echo "gate: PASS"
