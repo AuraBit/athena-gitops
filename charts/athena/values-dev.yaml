@@ -9,7 +9,9 @@
 # `docker buildx build --push` command used).
 media:
   image:
-    tag: "1492910" # athena-app@1492910 (PR #5, merged) — media: healthz tracer slice
+    tag: "1847f1e" # athena-app@1847f1e (PR #7, merged) — adds Postgres/pgx data layer
+    # (Plan 03-04 Task 1, PR #6) and Valkey-backed sessions/login/logout/session
+    # gate (Plan 03-04 Task 2, PR #7) on top of the healthz tracer slice.
   hostname: media-dev.athena.net
   env:
     environment: dev

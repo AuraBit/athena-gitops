@@ -44,7 +44,7 @@ spec:
               name: media-postgres-credentials
         - name: MEDIA_VALKEY_ADDR
           value: media-valkey:6379
-        image: athena-registry:5000/athena-media:1492910
+        image: athena-registry:5000/athena-media:1847f1e
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
