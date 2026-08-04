@@ -47,4 +47,4 @@ resources:
 # image change would collide in the same diff.
 images:
   - name: athena-registry:5000/athena-media
-    newTag: ede5af6 # media image pin — CI-to-CD handoff surface (D-22)
+    newTag: 2f2e650 # media image pin — CI-to-CD handoff surface (D-22)
